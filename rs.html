@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Mini CTF SRS — готовый</title>
+<style>
+  html,body{height:100%;margin:0;background:#000;color:#00ffd5;font-family:Consolas,monospace}
+  canvas{position:fixed;left:0;top:0;width:100%;height:100%;z-index:0}
+  .wrap{position:relative;z-index:2;max-width:1000px;margin:24px auto;padding:18px}
+  .header{text-align:center;margin-bottom:12px}
+  h1{font-size:2.2rem;text-shadow:0 0 12px #00ffd5;margin:4px}
+  .note{color:#9ff;opacity:.95}
+  .score{text-align:center;margin:8px;font-size:1.1rem}
+  .task{background:rgba(0,0,0,0.6);border:1px solid rgba(0,255,213,0.18);padding:14px;border-radius:10px;margin:12px 0;box-shadow:0 0 12px rgba(0,255,213,0.03)}
+  .task p{margin:6px 0}
+  input[type="text"]{padding:8px;border-radius:6px;border:1px solid #013;background:#001212;color:#00ffd5;width:62%}
+  button{padding:8px 12px;margin-left:8px;border-radius:6px;border:none;background:#00ffd5;color:#000;font-weight:700;cursor:pointer}
+  .ok{color:#7fff7f;font-weight:700}
+  .bad{color:#ff7f7f;font-weight:700}
+  .hint{color:#99ffd6;font-size:0.95rem}
+  .footer{text-align:center;margin-top:12px;color:#77ffd1;font-size:0.85rem}
+  .example{background:#001;display:inline-block;padding:6px 10px;border-radius:6px;border:1px solid #014}
+  .small{font-size:0.9rem;color:#bff}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<div class="wrap">
+  <div class="header">
+    <h1>⚡ Mini CTF SRS ⚡</h1>
+    <div class="note">Пример формата флага: <span class="example">flag{source_code_found}</span></div>
+    <div class="score">Очки: <span id="score">0</span> / 7</div>
+  </div>
+
+  <div id="tasksArea"></div>
+
+  <div class="footer small">.</div>
+</div>
+
+<script>
+/* ====== Матрица-анимация для фона ====== */
+const canvas = document.getElementById('bg');
+const ctx = canvas.getContext('2d');
+function resizeCanvas(){ canvas.width = innerWidth; canvas.height = innerHeight; }
+resizeCanvas(); window.addEventListener('resize', resizeCanvas);
+const chars = "01ABCD1234EFGH5678IJKL90MNOPQRSTUVXYZ@#$%&*".split('');
+const fontSize = 14;
+let cols = Math.floor(innerWidth / fontSize);
+let drops = new Array(cols).fill(0);
+function draw(){
+  const newCols = Math.floor(innerWidth / fontSize);
+  if(newCols !== drops.length){ cols = newCols; drops = new Array(cols).fill(0); }
+  ctx.fillStyle = 'rgba(0,0,0,0.06)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = '#00ffd5'; ctx.font = fontSize + 'px monospace';
+  for(let i=0;i<drops.length;i++){
+    const ch = chars[Math.floor(Math.random()*chars.length)];
+    ctx.fillText(ch, i*fontSize, drops[i]*fontSize);
+    if(drops[i]*fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  }
+}
+setInterval(draw, 40);
+
+/* ====== Ожидаемые флаги (ответы) —  ======
+  
+*/
+const expectedFlags = {
+  1: "flag{source_code_found}",
+  2: "flag{example_base64}",
+  3: "flag{rot13_swap}",
+  4: "flag{vigenere_secret}",
+  5: "flag{50}",
+  6: "flag{hex_magic}",
+  7: "flag{hello_world}"
+};
+
+/* ====== Задания — подсказки / зашифрованные строки ====== */
+const tasks = [
+  {id:1, text:"Найди скрытый флаг в коде страницы (см. комментарии и консоль).", hint:"Смотри HTML-комментарии и консоль (F12 → Console)."},
+  {id:2, text:"Расшифруй Base64: RmxhZ3tleGFtcGxlX2Jhc2U2NH0=", hint:"Base64 → текст"},
+  {id:3, text:"ROT13: 'sbyg{ebg13_fnjc}' — примените ROT13", hint:"ROT13"},
+  {id:4, text:"Vigenère: 'Yqvvtp md qzmlt' (ключ: SRS)", hint:"Vigenère, ключ 'SRS'"},
+  {id:5, text:"Реши пример: 15 * 3 + 5 = ? (флаг в формате flag{число})", hint:"Простая арифметика"},
+  {id:6, text:"Hex: '666c61677b6865785f6d616769637d' — преобразуйте hex → ascii", hint:"hex → ascii"},
+  {id:7, text:"Base32: 'JBSWY3DPEBLW64TMMQ======' — расшифруйте", hint:"Base32 → текст"}
+];
+
+/* ====== UI рендер карт карточек ====== */
+const tasksArea = document.getElementById('tasksArea');
+const saved = JSON.parse(localStorage.getItem('mini_ctf_saved') || '{}');
+
+function render(){
+  tasksArea.innerHTML = '';
+  tasks.forEach(t=>{
+    const solved = !!saved[t.id];
+    const div = document.createElement('div');
+    div.className = 'task';
+    div.innerHTML = `
+      <p><strong>Задание ${t.id}:</strong> ${t.text}</p>
+      <p class="hint">Подсказка: ${t.hint}</p>
+      <div>
+        <input type="text" id="inp${t.id}" placeholder="flag{...}" ${solved?'disabled':''}>
+        <button id="btn${t.id}" ${solved?'disabled':''}>Проверить</button>
+        <span id="res${t.id}">${solved?'<span class="ok">✓ решено</span>':''}</span>
+      </div>
+    `;
+    tasksArea.appendChild(div);
+    document.getElementById('btn'+t.id).addEventListener('click', ()=>check(t.id));
+  });
+  updateScore();
+}
+render();
+
+/* ====== Проверка флага ====== */
+function check(id){
+  const input = document.getElementById('inp'+id);
+  const val = (input.value || '').trim();
+  const res = document.getElementById('res'+id);
+  if(!val){ alert('Введите флаг в формате flag{...}'); return; }
+  if(val === expectedFlags[id]){
+    res.innerHTML = '<span class="ok">✅ Верно</span>';
+    saved[id] = true; localStorage.setItem('mini_ctf_saved', JSON.stringify(saved));
+    input.disabled = true; document.getElementById('btn'+id).disabled = true;
+    updateScore();
+  } else {
+    res.innerHTML = '<span class="bad">❌ Неверно</span>';
+  }
+}
+
+/* ====== Обновление счёта ====== */
+function updateScore(){
+  const s = Object.values(saved).filter(Boolean).length;
+  document.getElementById('score').innerText = s;
+}
+
+/* ====== Подсказка в консоли и скрытый флаг в комментарии ====== */
+console.log('Подсказка (в консоли): flag{console_secret_example}');
+/* Скрытый в комментарии флаг для задания 1:
+   flag{source_code_found}
+*/
+
+</script>
+</body>
+</html>
